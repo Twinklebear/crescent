@@ -1,0 +1,32 @@
+#ifndef RAY_ISPC_H
+#define RAY_ISPC_H
+
+#include "vec3f.ih"
+
+struct Ray1 {
+	vec3f org;
+	float t_near;
+	vec3f dir;
+	float time;
+	float t_far;
+	int mask;
+	int id;
+	int flags;
+};
+
+struct Hit1 {
+	vec3f normal;
+	float u;
+	float v;
+	int primID;
+	int geomID;
+	int instID;
+};
+
+struct RayHit1 {
+	Ray1 ray;
+	Hit1 hit;
+};
+
+#endif
+
