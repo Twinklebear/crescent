@@ -2,5 +2,13 @@
 name = "crescent"
 version = "0.1.0"
 authors = ["Will Usher <willusher.life@gmail.com>"]
+build = "build.rs"
 
 [dependencies]
+sol = "0.1.0"
+ispc = "0.3.8"
+image = "0.20.1"
+
+[build-dependencies]
+ispc = "0.3.8"
+
