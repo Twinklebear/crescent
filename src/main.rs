@@ -10,6 +10,9 @@ fn main() {
     let mut srgb_img_buf = vec![0u8; width * height * 3];
     // Can I do scene setup in Rust and build everything, then just
     // hand off to ISPC for rendering?
+    // TODO: Yes, the handles for embree are the same across everything
+    // so it's fine to setup everything in Rust and then pass
+    // the scene handle over to ISPC
     unsafe {
         crescent::render(std::ptr::null(), width as i32, height as i32,
                          framebuffer.as_mut_ptr());
