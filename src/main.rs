@@ -6,7 +6,7 @@ extern crate tobj;
 
 use std::path::Path;
 
-use cgmath::{Vector3, Vector4};
+use cgmath::{Vector3, Vector4, InnerSpace};
 use sol::{Device, Geometry, IntersectContext, RayN, RayHitN, Scene, TriangleMesh};
 
 ispc_module!(crescent);
@@ -71,9 +71,36 @@ fn main() {
         rtscene.intersect_stream_soa(&mut intersection_ctx, &mut ray_hit);
         for (i, hit) in ray_hit.hit.iter().enumerate().filter(|(_i, h)| h.hit()) {
             let uv = hit.uv();
-            framebuffer[(i + j * width) * 3] = uv.0;
-            framebuffer[(i + j * width) * 3 + 1] = uv.1;
-            framebuffer[(i + j * width) * 3 + 2] = 0.0;
+            if !mesh.normals.is_empty() {
+                let prim = hit.prim_id() as usize;
+                let tri = [mesh.indices[prim * 3] as usize,
+                           mesh.indices[prim * 3 + 1] as usize,
+                           mesh.indices[prim * 3 + 2] as usize];
+
+                let na = Vector3::new(mesh.normals[tri[0] * 3],
+                                      mesh.normals[tri[0] * 3 + 1],
+                                      mesh.normals[tri[0] * 3 + 2]);
+
+                let nb = Vector3::new(mesh.normals[tri[1] * 3],
+                                      mesh.normals[tri[1] * 3 + 1],
+                                      mesh.normals[tri[1] * 3 + 2]);
+
+                let nc = Vector3::new(mesh.normals[tri[2] * 3],
+                                      mesh.normals[tri[2] * 3 + 1],
+                                      mesh.normals[tri[2] * 3 + 2]);
+
+                let w = 1.0 - uv.0 - uv.1;
+                let mut n = (na * w + nb * uv.0 + nc * uv.1).normalize();
+                n = (n + Vector3::new(1.0, 1.0, 1.0)) * 0.5;
+
+                framebuffer[(i + j * width) * 3] = n.x;
+                framebuffer[(i + j * width) * 3 + 1] = n.y;
+                framebuffer[(i + j * width) * 3 + 2] = n.z;
+            } else {
+                framebuffer[(i + j * width) * 3] = uv.0;
+                framebuffer[(i + j * width) * 3 + 1] = uv.1;
+                framebuffer[(i + j * width) * 3 + 2] = 0.0;
+            }
         }
     }
 
