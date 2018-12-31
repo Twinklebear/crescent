@@ -6,6 +6,7 @@ build = "build.rs"
 
 [dependencies]
 sol = "0.1.2"
+tobj = "0.1.6"
 ispc = "0.3.8"
 image = "0.20.1"
 cgmath = "0.16.1"
