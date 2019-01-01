@@ -20,36 +20,44 @@ fn main() {
 
     let args: Vec<_> = std::env::args().collect();
     let (models, _) = tobj::load_obj(&Path::new(&args[1])).unwrap();
-    let mesh = &models[0].mesh;
 
-    println!("Mesh has {} triangles and {} verts",
-             mesh.indices.len() / 3, mesh.positions.len() / 3);
+    let mut tri_geoms = Vec::new();
 
-    // Make a triangle
-    let mut tris = TriangleMesh::unanimated(&device,
-                                            mesh.indices.len() / 3,
-                                            mesh.positions.len() / 3);
-    {
-        let mut verts = tris.vertex_buffer.map();
-        let mut tris = tris.index_buffer.map();
-        for i in 0..mesh.positions.len() / 3 { 
-            verts[i] = Vector4::new(mesh.positions[i * 3],
-                                    mesh.positions[i * 3 + 1],
-                                    mesh.positions[i * 3 + 2],
-                                    0.0);
+    for m in models.iter() {
+        let mesh = &m.mesh;
+        println!("Mesh has {} triangles and {} verts",
+                 mesh.indices.len() / 3, mesh.positions.len() / 3);
+
+        let mut tris = TriangleMesh::unanimated(&device,
+                                                mesh.indices.len() / 3,
+                                                mesh.positions.len() / 3);
+        {
+            let mut verts = tris.vertex_buffer.map();
+            let mut tris = tris.index_buffer.map();
+            for i in 0..mesh.positions.len() / 3 { 
+                verts[i] = Vector4::new(mesh.positions[i * 3],
+                                        mesh.positions[i * 3 + 1],
+                                        mesh.positions[i * 3 + 2],
+                                        0.0);
+            }
+
+            for i in 0..mesh.indices.len() / 3 { 
+                tris[i] = Vector3::new(mesh.indices[i * 3],
+                                       mesh.indices[i * 3 + 1],
+                                       mesh.indices[i * 3 + 2]);
+            }
         }
-
-        for i in 0..mesh.indices.len() / 3 { 
-            tris[i] = Vector3::new(mesh.indices[i * 3],
-                                   mesh.indices[i * 3 + 1],
-                                   mesh.indices[i * 3 + 2]);
-        }
+        let mut tri_geom = Geometry::Triangle(tris);
+        tri_geom.commit();
+        tri_geoms.push(tri_geom);
     }
-    let mut tri_geom = Geometry::Triangle(tris);
-    tri_geom.commit();
 
     let mut scene = Scene::new(&device);
-    scene.attach_geometry(tri_geom);
+    let mut mesh_ids = Vec::with_capacity(models.len());
+    for g in tri_geoms.drain(0..) {
+        let id = scene.attach_geometry(g);
+        mesh_ids.push(id);
+    }
     let rtscene = scene.commit();
 
     let mut intersection_ctx = IntersectContext::coherent();
@@ -71,6 +79,7 @@ fn main() {
         rtscene.intersect_stream_soa(&mut intersection_ctx, &mut ray_hit);
         for (i, hit) in ray_hit.hit.iter().enumerate().filter(|(_i, h)| h.hit()) {
             let uv = hit.uv();
+            let mesh = &models[mesh_ids[hit.geom_id() as usize] as usize].mesh;
             if !mesh.normals.is_empty() {
                 let prim = hit.prim_id() as usize;
                 let tri = [mesh.indices[prim * 3] as usize,
