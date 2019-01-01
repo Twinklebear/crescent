@@ -3,23 +3,63 @@ extern crate ispc;
 extern crate sol;
 extern crate cgmath;
 extern crate tobj;
+extern crate docopt;
+#[macro_use]
+extern crate serde_derive;
+extern crate rayon;
+
+mod tile;
 
 use std::path::Path;
 
 use cgmath::{Vector3, Vector4, InnerSpace};
-use sol::{Device, Geometry, IntersectContext, RayN, RayHitN, Scene, TriangleMesh};
+use sol::{Device, Geometry, IntersectContext, RayN, RayHitN, Scene,
+          TriangleMesh, CommittedScene};
+use docopt::Docopt;
+use rayon::prelude::*;
+
+use tile::Tile;
 
 ispc_module!(crescent);
 
+static USAGE: &'static str = "
+Usage:
+    crescent <objfile> [OPTIONS]
+    crescent (-h | --help)
+
+
+Options:
+  -o <path>          Specify the output file or directory to save the image or frames.
+                     Supported formats are PNG, JPG and PPM.
+  --eye=<x,y,z>      Specify the eye position for the camera.
+  --at=<x,y,z>       Specify the position to point the camera at.
+  --up=<x,y,z>       Specify the camera up vector.
+  -h, --help         Show this message.
+";
+
+static WIDTH: usize = 512;
+static HEIGHT: usize = 512;
+
+#[derive(Deserialize)]
+struct Args {
+    arg_objfile: String,
+    flag_eye: Option<String>,
+    flag_at: Option<String>,
+    flag_up: Option<String>,
+    flag_o: Option<String>,
+}
+
+
+fn parse_vec_arg(s: &str) -> Vec<f32> {
+    s.split(",").map(|x| x.parse::<f32>().unwrap()).collect()
+}
+
 fn main() {
-    let width = 512;
-    let height = 512;
-    let mut framebuffer = vec![0.0; width * height * 3];
-    let mut srgb_img_buf = vec![0u8; width * height * 3];
+    let args: Args = Docopt::new(USAGE).and_then(|d| d.deserialize()).unwrap_or_else(|e| e.exit());
+
     let device = Device::new();
 
-    let args: Vec<_> = std::env::args().collect();
-    let (models, _) = tobj::load_obj(&Path::new(&args[1])).unwrap();
+    let (models, _) = tobj::load_obj(&Path::new(&args.arg_objfile[..])).unwrap();
 
     let mut tri_geoms = Vec::new();
 
@@ -60,16 +100,55 @@ fn main() {
     }
     let rtscene = scene.commit();
 
-    let mut intersection_ctx = IntersectContext::coherent();
+    // Make the image tiles to distribute rendering work
+    let tile_size = (32, 32);
+    let mut tiles = Vec::new();
+    for j in 0..HEIGHT / tile_size.1 {
+        for i in 0..HEIGHT / tile_size.0 {
+            tiles.push(Tile::new(tile_size, (i * tile_size.0, j * tile_size.1)));
+        }
+    }
 
-    // Render the scene
-    for j in 0..height {
-        let y = -(j as f32 + 0.5) / height as f32 + 0.5;
+    // Render the tiles
+    tiles.par_iter_mut().for_each(|mut tile| render_tile(&mut tile, &rtscene, &models, &mesh_ids));
+
+    // Now write the tiles into the final framebuffer to save out
+    let mut final_image = vec![0; WIDTH * HEIGHT * 3];
+    for t in tiles.iter() {
+        for j in 0..t.dims.1 {
+            let y = j + t.pos.1;
+            for i in 0..t.dims.0 {
+                let x = i + t.pos.0;
+                final_image[(x + y * WIDTH) * 3] = t.srgb[(i + j * t.dims.0) * 3];
+                final_image[(x + y * WIDTH) * 3 + 1] = t.srgb[(i + j * t.dims.0) * 3 + 1];
+                final_image[(x + y * WIDTH) * 3 + 2] = t.srgb[(i + j * t.dims.0) * 3 + 2];
+            }
+        }
+    }
+
+    let out_path =
+        if let Some(path) = args.flag_o {
+            path
+        } else {
+            String::from("crescent.png")
+        };
+    match image::save_buffer(&out_path[..], &final_image[..], WIDTH as u32, HEIGHT as u32,
+                             image::RGB(8)) {
+        Ok(_) => println!("Rendered image saved to {}", out_path),
+        Err(e) => panic!("Error saving image: {}", e),
+    };
+}
+
+fn render_tile(tile: &mut Tile, rtscene: &CommittedScene,
+               models: &Vec<tobj::Model>, mesh_ids: &Vec<u32>) {
+    let mut intersection_ctx = IntersectContext::coherent();
+    for j in 0..tile.dims.1 {
+        let y = -((j + tile.pos.1) as f32 + 0.5) / HEIGHT as f32 + 0.5;
 
         // Try out streams of scanlines across x
-        let mut rays = RayN::new(width);
+        let mut rays = RayN::new(tile.dims.0);
         for (i, mut ray) in rays.iter_mut().enumerate() {
-            let x = (i as f32 + 0.5) / width as f32 - 0.5;
+            let x = ((i + tile.pos.0) as f32 + 0.5) / WIDTH as f32 - 0.5;
             let dir_len = f32::sqrt(x * x + y * y + 1.0);
             ray.set_origin(Vector3::new(0.0, 0.0, 3.5));
             ray.set_dir(Vector3::new(x / dir_len, y / dir_len, -1.0 / dir_len));
@@ -102,26 +181,19 @@ fn main() {
                 let mut n = (na * w + nb * uv.0 + nc * uv.1).normalize();
                 n = (n + Vector3::new(1.0, 1.0, 1.0)) * 0.5;
 
-                framebuffer[(i + j * width) * 3] = n.x;
-                framebuffer[(i + j * width) * 3 + 1] = n.y;
-                framebuffer[(i + j * width) * 3 + 2] = n.z;
+                tile.img[(i + j * tile.dims.0) * 3] = n.x;
+                tile.img[(i + j * tile.dims.0) * 3 + 1] = n.y;
+                tile.img[(i + j * tile.dims.0) * 3 + 2] = n.z;
             } else {
-                framebuffer[(i + j * width) * 3] = uv.0;
-                framebuffer[(i + j * width) * 3 + 1] = uv.1;
-                framebuffer[(i + j * width) * 3 + 2] = 0.0;
+                tile.img[(i + j * tile.dims.0) * 3] = uv.0;
+                tile.img[(i + j * tile.dims.0) * 3 + 1] = uv.1;
+                tile.img[(i + j * tile.dims.0) * 3 + 2] = 0.0;
             }
         }
     }
-
     unsafe {
-        crescent::framebuffer_to_srgb(framebuffer.as_ptr(), srgb_img_buf.as_mut_ptr(),
-                                      width as i32, height as i32);
+        crescent::image_to_srgb(tile.img.as_ptr(), tile.srgb.as_mut_ptr(),
+                                tile.dims.0 as i32, tile.dims.1 as i32);
     }
-
-    match image::save_buffer("out.png", &srgb_img_buf[..], width as u32, height as u32,
-                             image::RGB(8)) {
-        Ok(_) => println!("Rendered image saved to out.png"),
-        Err(e) => panic!("Error saving image: {}", e),
-    };
 }
 

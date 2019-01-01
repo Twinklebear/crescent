@@ -10,7 +10,7 @@ float linear_to_srgb(const float f) {
 }
 
 // Convert the linear RGB framebuffer we render to to sRGB8 for saving out to an image
-export void framebuffer_to_srgb(const uniform float fb[], uniform unsigned int8 srgb[],
+export void image_to_srgb(const uniform float fb[], uniform unsigned int8 srgb[],
 		const uniform int32 width, const uniform int32 height)
 {
 	for (uniform int y = 0; y < height; ++y) {
