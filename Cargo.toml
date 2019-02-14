@@ -5,7 +5,7 @@ authors = ["Will Usher <willusher.life@gmail.com>"]
 build = "build.rs"
 
 [dependencies]
-sol = "0.1.3"
+embree-rs = "0.3.2"
 tobj = "0.1.6"
 ispc = "0.3.8"
 image = "0.20.1"

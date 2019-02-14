@@ -1,6 +1,6 @@
 #[macro_use]
 extern crate ispc;
-extern crate sol;
+extern crate embree_rs;
 extern crate cgmath;
 extern crate tobj;
 extern crate docopt;
@@ -13,7 +13,7 @@ mod tile;
 use std::path::Path;
 
 use cgmath::{Vector3, Vector4, InnerSpace};
-use sol::{Device, Geometry, IntersectContext, RayN, RayHitN, Scene,
+use embree_rs::{Device, Geometry, IntersectContext, RayN, RayHitN, Scene,
           TriangleMesh, CommittedScene};
 use docopt::Docopt;
 use rayon::prelude::*;
