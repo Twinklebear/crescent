@@ -4,22 +4,22 @@ use std::env;
 use std::path::PathBuf;
 
 fn main() {
-    let mut cfg = ispc::Config::new();
-    let ispc_files = vec!["src/crescent.ispc"];
-    for s in &ispc_files[..] {
-        cfg.file(*s);
-    }
-    cfg.compile("crescent");
-
+    let mut embree_include;
     if let Ok(e) = env::var("EMBREE_DIR") {
-        let mut embree_dir = PathBuf::from(e);
-        embree_dir.push("lib");
-        println!("cargo:rustc-link-search=native={}", embree_dir.display());
+        embree_include = PathBuf::from(e);
+        embree_include.push("include");
     } else {
         println!("cargo:error=Please set EMBREE_DIR=<path to embree3 root>");
         panic!("Failed to find embree");
     }
     println!("cargo:rerun-if-env-changed=EMBREE_DIR");
-    println!("cargo:rustc-link-lib=embree3");
+
+    let mut cfg = ispc::Config::new();
+    let ispc_files = vec!["src/crescent.ispc"];
+    for s in &ispc_files[..] {
+        cfg.file(*s);
+    }
+    cfg.include_path(embree_include);
+    cfg.compile("crescent");
 }
 
