@@ -90,8 +90,7 @@ export void image_to_srgb(const uniform float fb[], uniform unsigned int8 srgb[]
 {
 	foreach (i = 0 ... width, y = 0 ... height) {
 		for (int c = 0; c < 3; ++c){
-			//float val = linear_to_srgb(fb[(y * width + i) * 3 + c]);
-			float val = fb[(y * width + i) * 3 + c];
+			float val = linear_to_srgb(fb[(y * width + i) * 3 + c]);
 			srgb[(y * width + i) * 3 + c] = clamp(val * 255.0, 0.0, 255.0);
 		}
 	}
