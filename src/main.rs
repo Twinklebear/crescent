@@ -112,6 +112,8 @@ fn main() {
         }
     }
 
+    // TODO: Interactive viewer similar to rtobj
+
     // Render the tiles
     tiles.par_iter_mut().for_each(|mut tile| render_tile(&mut tile, &rtscene, &models, &mesh_ids));
 
