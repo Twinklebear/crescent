@@ -19,7 +19,8 @@ fn main() {
     for s in &ispc_files[..] {
         cfg.file(*s);
     }
-    cfg.include_path(embree_include);
-    cfg.compile("crescent");
+    cfg.include_path(embree_include)
+        .optimization_opt(ispc::OptimizationOpt::FastMath)
+        .compile("crescent");
 }
 

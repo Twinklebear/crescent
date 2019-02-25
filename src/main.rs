@@ -11,6 +11,8 @@ extern crate rayon;
 mod tile;
 
 use std::path::Path;
+use std::mem;
+use std::ptr;
 
 use cgmath::{Vector3, Vector4, InnerSpace};
 use embree_rs::{Device, Geometry, IntersectContext, RayN, RayHitN, Scene,
@@ -101,6 +103,7 @@ fn main() {
     let rtscene = scene.commit();
 
     // Make the image tiles to distribute rendering work
+    // TODO: Non-multiple of tile size images
     let tile_size = (32, 32);
     let mut tiles = Vec::new();
     for j in 0..HEIGHT / tile_size.1 {
@@ -142,56 +145,31 @@ fn main() {
 fn render_tile(tile: &mut Tile, rtscene: &CommittedScene,
                models: &Vec<tobj::Model>, mesh_ids: &Vec<u32>) {
     let mut intersection_ctx = IntersectContext::coherent();
-    for j in 0..tile.dims.1 {
-        let y = -((j + tile.pos.1) as f32 + 0.5) / HEIGHT as f32 + 0.5;
 
-        // Try out streams of scanlines across x
-        let mut rays = RayN::new(tile.dims.0);
-        for (i, mut ray) in rays.iter_mut().enumerate() {
-            let x = ((i + tile.pos.0) as f32 + 0.5) / WIDTH as f32 - 0.5;
-            let dir_len = f32::sqrt(x * x + y * y + 1.0);
-            ray.set_origin(Vector3::new(0.0, 0.0, 3.5));
-            ray.set_dir(Vector3::new(x / dir_len, y / dir_len, -1.0 / dir_len));
-        }
-
-        let mut ray_hit = RayHitN::new(rays);
-        rtscene.intersect_stream_soa(&mut intersection_ctx, &mut ray_hit);
-        for (i, hit) in ray_hit.hit.iter().enumerate().filter(|(_i, h)| h.hit()) {
-            let uv = hit.uv();
-            let mesh = &models[mesh_ids[hit.geom_id() as usize] as usize].mesh;
-            if !mesh.normals.is_empty() {
-                let prim = hit.prim_id() as usize;
-                let tri = [mesh.indices[prim * 3] as usize,
-                           mesh.indices[prim * 3 + 1] as usize,
-                           mesh.indices[prim * 3 + 2] as usize];
-
-                let na = Vector3::new(mesh.normals[tri[0] * 3],
-                                      mesh.normals[tri[0] * 3 + 1],
-                                      mesh.normals[tri[0] * 3 + 2]);
-
-                let nb = Vector3::new(mesh.normals[tri[1] * 3],
-                                      mesh.normals[tri[1] * 3 + 1],
-                                      mesh.normals[tri[1] * 3 + 2]);
-
-                let nc = Vector3::new(mesh.normals[tri[2] * 3],
-                                      mesh.normals[tri[2] * 3 + 1],
-                                      mesh.normals[tri[2] * 3 + 2]);
-
-                let w = 1.0 - uv.0 - uv.1;
-                let mut n = (na * w + nb * uv.0 + nc * uv.1).normalize();
-                n = (n + Vector3::new(1.0, 1.0, 1.0)) * 0.5;
-
-                tile.img[(i + j * tile.dims.0) * 3] = n.x;
-                tile.img[(i + j * tile.dims.0) * 3 + 1] = n.y;
-                tile.img[(i + j * tile.dims.0) * 3 + 2] = n.z;
-            } else {
-                tile.img[(i + j * tile.dims.0) * 3] = uv.0;
-                tile.img[(i + j * tile.dims.0) * 3 + 1] = uv.1;
-                tile.img[(i + j * tile.dims.0) * 3 + 2] = 0.0;
-            }
-        }
-    }
+    // Generate a stream of rays for the entire tile
+    let mut rays = RayN::new(tile.dims.0 * tile.dims.1);
     unsafe {
+        // TODO: Camera parameters
+        let mut sys_rays = rays.as_raynp();
+        crescent::generate_primary_rays(mem::transmute(&mut sys_rays),
+                                        tile.pos.0 as u32, tile.pos.1 as u32,
+                                        WIDTH as u32, HEIGHT as u32,
+                                        tile.dims.0 as u32, tile.dims.1 as u32);
+    }
+
+    let mut ray_hit = RayHitN::new(rays);
+    rtscene.intersect_stream_soa(&mut intersection_ctx, &mut ray_hit);
+
+    unsafe {
+        let mesh = &models[0].mesh;
+        let normals = if mesh.normals.is_empty() { ptr::null() } else { mesh.normals.as_ptr() };
+        crescent::shade_ray_stream(mem::transmute(&mut ray_hit.as_rayhitnp()),
+                                    tile.dims.0 as u32, tile.dims.1 as u32,
+                                    mesh.indices.as_ptr(),
+                                    mesh.positions.as_ptr(),
+                                    normals,
+                                    tile.img.as_mut_ptr());
+
         crescent::image_to_srgb(tile.img.as_ptr(), tile.srgb.as_mut_ptr(),
                                 tile.dims.0 as i32, tile.dims.1 as i32);
     }
