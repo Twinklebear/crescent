@@ -21,6 +21,7 @@ fn main() {
     }
     cfg.include_path(embree_include)
         .optimization_opt(ispc::OptimizationOpt::FastMath)
+        .opt_level(2)
         .compile("crescent");
 }
 

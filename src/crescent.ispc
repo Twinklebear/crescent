@@ -73,10 +73,10 @@ export void shade_ray_stream(uniform RTCRayHitNp *uniform ray_hit,
 
 			vec3f a = make_vec3f(v1[0] - v0[0], v1[1] - v0[1], v1[2] - v0[2]);
 			vec3f b = make_vec3f(v2[0] - v0[0], v2[1] - v0[1], v2[2] - v0[2]);
-			vec3f normal = cross(normalize(a), normalize(b));
-			normalize(normal);
+			vec3f normal = normalize(cross(a, b));
 
 			normal = (normal + make_vec3f(1.f, 1.f, 1.f)) * 0.5f;
+
 			tile[pixel] = normal.x;
 			tile[pixel + 1] = normal.y;
 			tile[pixel + 2] = normal.z;
@@ -90,7 +90,8 @@ export void image_to_srgb(const uniform float fb[], uniform unsigned int8 srgb[]
 {
 	foreach (i = 0 ... width, y = 0 ... height) {
 		for (int c = 0; c < 3; ++c){
-			float val = linear_to_srgb(fb[(y * width + i) * 3 + c]);
+			//float val = linear_to_srgb(fb[(y * width + i) * 3 + c]);
+			float val = fb[(y * width + i) * 3 + c];
 			srgb[(y * width + i) * 3 + c] = clamp(val * 255.0, 0.0, 255.0);
 		}
 	}
