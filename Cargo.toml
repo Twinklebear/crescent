@@ -9,14 +9,14 @@ build = "build.rs"
 embree-rs = { path="../embree-rs" }
 #ispc = "1.0.4"
 ispc = {path="../ispc-rs"}
-tobj = "0.1.6"
-image = "0.20.1"
-cgmath = "0.16.1"
-docopt = "1.0.2"
+tobj = "0.1.11"
+image = "0.22"
+cgmath = "0.17"
+docopt = "1.1"
 serde = "1.0"
 serde_derive = "1.0"
 serde_json = "1.0"
-rayon = "1.0.3"
+rayon = "1.2"
 
 [build-dependencies]
 #ispc = "1.0.4"

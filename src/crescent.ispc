@@ -1,3 +1,4 @@
+#include <embree3/rtcore.isph>
 #include <embree3/rtcore_ray.isph>
 #include "vec3f.ih"
 #include "ray.ih"
